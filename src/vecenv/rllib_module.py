@@ -41,8 +41,19 @@ class RLModule(TorchRLModule, ValueFunctionAPI):
 
         # --- 4. MODEL ARCHITECTURE ---
         self.action_shape = target_act_space.shape
-        self.num_worlds, self.obs_dim = target_obs_space["states"].shape
-        self.action_dim = int(self.action_shape[0]/self.num_worlds)
+
+        self.packed_env = False
+        if len(target_obs_space["states"].shape) == 2:
+            # If we pack the environment the observation space has 
+            # the number of sub envs as a dimension
+            self.packed_env = True
+
+        if self.packed_env:
+            self.num_worlds, self.obs_dim = target_obs_space["states"].shape
+            self.action_dim = int(self.action_shape[0]/self.num_worlds)
+        else:
+            self.obs_dim = target_obs_space["states"].shape[0]
+            self.action_dim = self.action_shape[0]
 
 
         self.dims = [256, 128, 64]
@@ -56,7 +67,6 @@ class RLModule(TorchRLModule, ValueFunctionAPI):
 
         self.pi_mean = nn.Linear(self.dims[2], self.action_dim)
         self.pi_log_std = nn.Linear(self.dims[2], self.action_dim)
-        # self.pi_log_std = nn.Parameter(torch.zeros(self.action_dim))
 
         self.vf_net = nn.Sequential(
             nn.Linear(self.obs_dim, self.dims[0]),
@@ -91,10 +101,11 @@ class RLModule(TorchRLModule, ValueFunctionAPI):
         with torch.no_grad():
 
             action_dist_inputs =  self._policy_forward(batch)
-            # We need the first dimension to be equal to 1,
-            # since somewhere along the way the actions get unbatched otherwise
-            # and the envronment recieves only individual actions
-            action_dist_inputs = action_dist_inputs.unsqueeze(0)
+            if self.packed_env:
+                # We need the first dimension to be equal to 1,
+                # since somewhere along the way the actions get unbatched otherwise
+                # and the envronment recieves only individual actions
+                action_dist_inputs = action_dist_inputs.unsqueeze(0)
 
             return {
                 "action_dist_inputs": action_dist_inputs,
@@ -105,10 +116,11 @@ class RLModule(TorchRLModule, ValueFunctionAPI):
         with torch.no_grad():
 
             action_dist_inputs =  self._policy_forward(batch)
-            # We need the first dimension to be equal to 1,
-            # since somewhere along the way the actions get unbatched otherwise
-            # and the envronment recieves only individual actions
-            action_dist_inputs = action_dist_inputs.unsqueeze(0)
+            if self.packed_env:
+                # We need the first dimension to be equal to 1,
+                # since somewhere along the way the actions get unbatched otherwise
+                # and the envronment recieves only individual actions
+                action_dist_inputs = action_dist_inputs.unsqueeze(0)
 
             return {
                 "action_dist_inputs": action_dist_inputs,

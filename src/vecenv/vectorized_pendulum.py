@@ -129,11 +129,9 @@ class PendulaEnv(gym.Env):
         # This will throw a warning in tests/envs/test_envs in utils/env_checker.py as the space is not symmetric
         #   or normalised as max_torque == 2 by default. Ignoring the issue here as the default settings are too old
         #   to update to follow the gymnasium api
-        vec_high = high.reshape(-1, 1).repeat(self.num_envs,1).T
         self.random_action_space = spaces.Box(
             low=-self.max_torque, high=self.max_torque, shape=(self.num_envs, 1), dtype=np.float32
         )
-        # self.observation_space = spaces.Box(low=-vec_high, high=vec_high, shape=(self.num_envs, 3), dtype=np.float32)
 
         self.single_action_space = spaces.Box(
             low=-self.max_torque, high=self.max_torque, shape=(1,), dtype=np.float32
@@ -176,8 +174,6 @@ class PendulaEnv(gym.Env):
         truncated =  self.step_idx >= self.max_episode_steps
         terminated = torch.zeros_like(truncated, dtype=torch.bool)
         self.active_envs = (terminated.logical_or(truncated)).logical_not()
-        # if (self.step_idx >= self.max_episode_steps).any():
-        #     print("here")
         return self._get_obs(), -costs, terminated, truncated, {}
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -334,6 +330,13 @@ class VecEnvWrapper(VectorEnv):
         self._autoreset_envs = torch.zeros(
             (self.num_envs,), dtype=torch.bool, device=self.device
         )
+        high = np.array([1.0, 1.0, self.max_speed], dtype=np.float32)
+        self.single_observation_space = spaces.Dict(
+            {
+                "states": spaces.Box(low=-high, high=high, dtype=np.float32),
+            }
+        )
+        self.observation_space = self.single_observation_space
 
     def reset(
         self,
@@ -346,7 +349,7 @@ class VecEnvWrapper(VectorEnv):
         self._autoreset_envs = torch.zeros(
             (self.num_envs,), dtype=torch.bool, device=self.device
         )
-        return self._process_outputs(obs, info)
+        return self._process_outputs(self._get_obs(obs), info)
 
     def step(self, action_dict: ActType) -> tuple[ObsType, ArrayType, ArrayType, ArrayType, dict[str, Any]]:
         action_dict = self._process_inputs(action_dict)
@@ -375,7 +378,7 @@ class VecEnvWrapper(VectorEnv):
             # TODO Consider implementing AutoresetMode.SAME_STEP, but we will need to
             # unbatch reset observations to fill in "final_obs" field in infos.
             raise ValueError(f"Unexpected autoreset mode, {self.autoreset_mode}")
-        return self._process_outputs(obs, reward, terminated, truncated, info)
+        return self._process_outputs(self._get_obs(obs), reward, terminated, truncated, info)
 
     def render(self, sub_env_idx:int=0):
         return self.wrapped_env.render(sub_env_idx=sub_env_idx)
@@ -411,6 +414,10 @@ class VecEnvWrapper(VectorEnv):
             src,
         )
 
+    def _get_obs(self, obs):
+        return {
+            "states": obs,
+        }
 
 class PackedVecEnvWrapper(gym.Env):
     def __init__(self, num_envs:int=1, render_mode="human", max_episode_steps:int=200):
@@ -436,8 +443,6 @@ class PackedVecEnvWrapper(gym.Env):
                 "truncateds": spaces.Box(low=0, high=1, shape=(self.num_envs,), dtype=np.bool),
             }
         )
-        # self.single_observation_space = self.observation_space
-        # self.single_action_space = self.action_space
 
     def reset(
         self,

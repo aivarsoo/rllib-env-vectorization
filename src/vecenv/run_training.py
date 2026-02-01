@@ -1,5 +1,3 @@
-
-
 import json
 import numpy as np
 import os
@@ -13,7 +11,6 @@ from ray.rllib.connectors.env_to_module import (
     AddTimeDimToBatchAndZeroPad,
     NumpyToTensor,
 )
-from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
@@ -125,14 +122,17 @@ def run(num_iterations, version, num_envs, train_batch, minibatch_size, eval_fre
         env_runners = {
             "gym_env_vectorize_mode": "vector_entry_point",
             "num_envs_per_env_runner": env_cfg["num_envs"],
-            }
+            "env_to_module_connector": lambda env, spaces, device: [
+                AddObservationsFromEpisodesToBatch(),
+                AddTimeDimToBatchAndZeroPad(),
+                AddStatesFromEpisodesToBatch(),
+                # BatchIndividualItems(), - we don't need to batch here.
+                NumpyToTensor(device=device),
+            ],          
+        }
         training = {
             "train_batch_size": train_batch,
             "minibatch_size": minibatch_size,
-        }
-        rl_module = {
-            # "rl_module_spec": RLModuleSpec(module_class=RLModule),
-            "model_config": DefaultModelConfig(fcnet_activation="relu"),
         }
         def make_env(env_cfg):
             env = PendulaEnv(**env_cfg)
@@ -167,23 +167,23 @@ def run(num_iterations, version, num_envs, train_batch, minibatch_size, eval_fre
             # Connectors are defined in the custom config class
         }
 
-        rl_module = {
-            "rl_module_spec": RLModuleSpec(module_class=RLModule),
-        }
-
         def make_env(env_cfg):
             return PackedVecEnvWrapper(**env_cfg)
 
         register_env("pendulum_env", make_env)
+    
+    rl_module = {
+        "rl_module_spec": RLModuleSpec(module_class=RLModule),
+    }
 
     config = config.environment(
         **environment
     ).env_runners(
         **env_runners,
-        num_env_runners=1,
+        num_env_runners=0,
         num_gpus_per_env_runner=1e-2,
     ).learners(
-        num_learners=1,
+        num_learners=0,
         num_gpus_per_learner=1e-2,
     ).training(
         **training,
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     # num_envs = 1_000
     # train_batch = 10_000
     # minibatch_size = 1_000 #- needs disabling the minibatch check 
-    # fps, timings = run(num_iterations, "packed_vec", num_envs, train_batch, minibatch_size, eval_frequency, logdir, render=True)
+    # fps, timings = run(num_iterations, "vec", num_envs, train_batch, minibatch_size, eval_frequency, logdir, render=True)
 
     num_iterations = 5
     eval_frequency = 50
