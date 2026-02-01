@@ -1,0 +1,20 @@
+[build-system]
+requires = ["uv_build >= 0.9.5, <0.10.0"]
+build-backend = "uv_build"
+
+[project]
+name = "vecenv"
+version = "0.1.0"
+description = "Vectorization of RL-lib environments."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "imageio",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pygame",
+    "jupyterlab",
+    "ray[rllib]==2.52.1",
+    "torch",
+]
